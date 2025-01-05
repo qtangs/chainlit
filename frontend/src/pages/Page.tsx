@@ -1,9 +1,15 @@
-import { Navigate } from 'react-router-dom';
+import { useContext, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useRecoilValue } from 'recoil';
 
 import { Alert, Box, Stack } from '@mui/material';
 
-import { sideViewState, useAuth, useConfig } from '@chainlit/react-client';
+import {
+  ChainlitContext,
+  sideViewState,
+  useAuth,
+  useConfig
+} from '@chainlit/react-client';
 
 import { ElementSideView } from 'components/atoms/elements';
 import { Translator } from 'components/i18n';
@@ -18,20 +24,40 @@ type Props = {
 };
 
 const Page = ({ children }: Props) => {
-  const { isAuthenticated } = useAuth();
+  const { data: appConfig, isAuthenticated, setAccessToken } = useAuth();
   const { config } = useConfig();
   const userEnv = useRecoilValue(userEnvState);
   const sideViewElement = useRecoilValue(sideViewState);
+  const apiClient = useContext(ChainlitContext);
+
+  const navigate = useNavigate();
+  const location = useLocation();
 
   if (config?.userEnv) {
+    const envPath = location.search ? `/env${location.search}` : '/env';
     for (const key of config.userEnv || []) {
-      if (!userEnv[key]) return <Navigate to="/env" />;
+      if (!userEnv[key]) navigate(envPath);
     }
   }
 
-  if (!isAuthenticated) {
-    return <Navigate to="/login" />;
-  }
+  const loginPath = location.search ? `/login${location.search}` : '/login';
+
+  useEffect(() => {
+    if (appConfig && appConfig.requireLogin && !isAuthenticated) {
+      if (appConfig.headerAuth) {
+        apiClient
+          .headerAuth()
+          .then((json) => {
+            setAccessToken(json.access_token);
+          })
+          .catch(() => {
+            navigate(loginPath);
+          });
+      } else {
+        navigate(loginPath);
+      }
+    }
+  }, [appConfig, isAuthenticated]);
 
   return (
     <Box
